@@ -1,0 +1,125 @@
+-- ====================================================================
+-- ENGINE SPECIFIC CONFIGURATION
+-- ====================================================================
+
+-- Force SQLite engine constraint validation
+PRAGMA foreign_keys = ON;
+
+-- ====================================================================
+-- 1. USERS TABLE (Access Control & Identity Profiles) ---  Create the Master Users Registry
+-- ====================================================================
+CREATE TABLE Users (
+    user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,          -- Prevents overlapping user login naming bugs
+    email TEXT NOT NULL UNIQUE,             -- Used for communications and transactional receipts
+    password_hash TEXT NOT NULL,            -- Stored as a secure cryptographic hashing string
+    phone_number TEXT,                      -- Delivery courier dispatch routing reference
+    role TEXT NOT NULL DEFAULT 'customer',  -- Access tier check: 'customer' or 'admin'
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+
+-- ====================================================================
+-- 1. COMPONENTS TABLE (The Single-Source Master Catalog) -- Create the Master COMPONENTS Registry
+-- ====================================================================
+CREATE TABLE Components (
+    component_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,         -- e.g., 'CPU', 'RAM', 'GPU'
+    brand TEXT NOT NULL,            -- e.g., 'Intel', 'AMD', 'NVIDIA'
+    name TEXT NOT NULL,             -- e.g., 'Core i7-13700K', 'RTX 4060'
+    price REAL NOT NULL,            -- Live retail price variable
+    stock_quantity INTEGER NOT NULL,-- Live warehouse inventory balance
+    is_active INTEGER NOT NULL DEFAULT 1, -- 1 = Available, 0 = Discontinued
+    specs_json TEXT                 -- Dynamic specifications stored as a JSON string
+);
+
+-- ====================================================================
+-- 2. CUSTOMBUILDS TABLE (The Sandbox Blueprint Folder)
+-- ====================================================================
+CREATE TABLE CustomBuilds (
+    build_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,       -- Link to application login user tracking system
+    build_name TEXT NOT NULL,       -- Name of layout (e.g., 'Rahul Gaming Setup')
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+-- ====================================================================
+-- 3. BUILDDETAILS TABLE (The Sandbox Selection Bridge)
+-- ====================================================================
+CREATE TABLE BuildDetails (
+    build_id INTEGER NOT NULL,
+    component_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (build_id, component_id),
+    -- ON DELETE CASCADE ensures if a build is deleted, its items are too.
+    FOREIGN KEY (build_id) REFERENCES CustomBuilds(build_id) ON DELETE CASCADE,
+    FOREIGN KEY (component_id) REFERENCES Components(component_id) ON DELETE RESTRICT ---check this
+);
+
+-- ====================================================================
+-- 4. ORDERS TABLE (The Shipping Operational Record)
+-- ====================================================================
+CREATE TABLE Orders (
+    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    build_id INTEGER, -- 👈 New column added for custom configuration tracking
+    order_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    order_status TEXT NOT NULL DEFAULT 'Processing',
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE RESTRICT,
+    FOREIGN KEY (build_id) REFERENCES CustomBuilds(build_id) ON DELETE SET NULL -- 👈 Protects order history if user clears their sandbox
+);
+
+/*Why ON DELETE SET NULL for build_id?
+This is an excellent teaching point for your student. If a customer deletes a sandbox blueprint (CustomBuilds) from their profile dashboard, you do not want your script to delete their financial transaction history (ON DELETE CASCADE). Using ON DELETE SET NULL ensures the order remains in the system for accounting, even if the blueprint design file is removed.
+*/
+
+-- ====================================================================
+-- 5. ORDERDETAILS TABLE (The Time-Locked Historical Snapshot)
+-- ====================================================================
+CREATE TABLE OrderDetails (
+    order_id INTEGER NOT NULL,
+    component_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    purchase_price REAL NOT NULL, -- ❄️ Frozen snapshot of active transaction price
+    PRIMARY KEY (order_id, component_id),
+   -- Rule 1: If an entire order is deleted, wipe the details
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE,
+   -- Rule 2: Protect financial history from inventory deletions
+    FOREIGN KEY (component_id) REFERENCES Components(component_id) ON DELETE RESTRICT -- Protection wall!
+);
+
+-- ====================================================================
+-- 6. INVOICES TABLE (The Legal Financial Proof File)
+-- ====================================================================
+CREATE TABLE Invoices (
+    invoice_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL UNIQUE, -- Enforces the strict 1:1 relationship constraint
+    amount_paid REAL NOT NULL,
+    tax_amount REAL NOT NULL,
+    payment_method TEXT NOT NULL, -- e.g., 'UPI', 'Card'
+    payment_status TEXT NOT NULL DEFAULT 'Paid',
+    invoice_date TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (order_id) REFERENCES Orders(order_id)
+);
+
+
+Crucial Concepts Your Student Must Learn from This Final Layout
+
+1) The Core Data Split (Live Data vs. Frozen History)
+	Notice that Components.price changes constantly to match market competition.
+	OrderDetails.purchase_price never changes. It freezes time at checkout to keep financial reports clean.
+
+2) The JSON Strategy (No More Empty Columns)
+	Instead of creating different tables for CPUs and RAM, all hardware fits into Components.
+	Unique physical parameters are stored in specs_json. This prevents a massive table filled with blank rows.
+
+
+3) The Balance of Delete Rules
+	Draft cleanups use ON DELETE CASCADE. If a parent setup is deleted, its draft lines disappear automatically.
+	Historical transactions use ON DELETE RESTRICT. The database blocks administrators from accidentally deleting components that are 	linked to past customer orders
+
+
+
+
+

@@ -1,0 +1,39 @@
+    
+# ====================================================================
+# 1. SAVE BUILDS & BUILDDETAILS
+# ====================================================================
+
+# Seed Rahul's saved sandbox configuration layout
+    cursor.execute("INSERT INTO CustomBuilds (build_id, user_id, build_name) VALUES (500, 10, 'Rahul Custom Beast');")
+    cursor.executemany("INSERT INTO BuildDetails (build_id, component_id, quantity) VALUES (?, ?, ?);", [
+        (500, 1, 1), # 1x Intel i7 CPU (35,000.00)
+        (500, 4, 1), # 1x RTX 4060 Ti GPU (39,900.00)
+        (500, 7, 2)  # 2x Corsair DDR5 RAM (11,500.00 x 2 = 23,000.00)
+    ])
+
+
+
+# ====================================================================
+# 2. THE CHECKOUT ENGINE
+# ====================================================================
+
+    try:
+        cursor.execute("BEGIN TRANSACTION;")
+        
+        # 1. Fetch parts directly out of the sandbox bridge table
+        cursor.execute("""
+            SELECT bd.component_id, bd.quantity, c.name, c.price, c.stock_quantity, c.is_active
+            FROM BuildDetails bd
+            JOIN Components c ON bd.component_id = c.component_id
+            WHERE bd.build_id = ?
+        """, (build_id,))
+        items_to_buy = cursor.fetchall()
+
+
+	validated_items = []
+        cart_subtotal = 0.0
+
+
+	
+
+
